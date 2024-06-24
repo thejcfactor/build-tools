@@ -105,19 +105,20 @@ if [ -x "${PREFLIGHT_EXE}" ]; then
     status "Using existing preflight binary"
 elif ${BUILD_PREFLIGHT}; then
     status "Building preflight..."
-    PREFLIGHTVER=1.2.1
+    PREFLIGHTVER=1.9.4
+    GOVER=1.22.1
 
     # The pre-compiled preflight binaries sometimes requires a newer
     # glibc than is available where this script runs. So we build it
     # ourselves. This also allows us to do our patch.
     mkdir -p ${WORKSPACE}/build
     pushd ${WORKSPACE}/build &> /dev/null
-    cbdep install -d deps golang 1.19.7
-    export PATH=$(pwd)/deps/go1.19.7/bin:${PATH}
+    cbdep install -d deps golang ${GOVER}
+    export PATH=$(pwd)/deps/go${GOVER}/bin:${PATH}
     status Cloning openshift-preflight repository
-    git clone https://github.com/redhat-openshift-ecosystem/openshift-preflight -b ${PREFLIGHTVER} &> /dev/null
+    git clone https://github.com/redhat-openshift-ecosystem/openshift-preflight -b ${PREFLIGHTVER}
     cd openshift-preflight
-    perl -pi -e 's/if user == ""/if user == "nobody"/' certification/internal/policy/container/runs_as_nonroot.go
+    perl -pi -e 's/if user == ""/if user == "nobody"/' internal/policy/container/runs_as_nonroot.go
     status Building preflight binary
     make RELEASE_TAG=${PREFLIGHTVER} build
     cp -a preflight "${PREFLIGHT_EXE}"
@@ -203,4 +204,4 @@ fi
 # environment variables to have been set appropriately.
 echo
 status Running preflight on container ${EXTERNAL_IMAGE}...
-"${PREFLIGHT_EXE}" check container ${EXTERNAL_IMAGE} ${EXTRA_PREFLIGHT_ARGS}
+"${PREFLIGHT_EXE}" check container ${EXTERNAL_IMAGE} --platform ${ARCH} ${EXTRA_PREFLIGHT_ARGS}

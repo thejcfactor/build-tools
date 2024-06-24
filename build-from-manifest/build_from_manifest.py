@@ -104,6 +104,7 @@ class ManifestBuilder:
         self.release = None
         self.last_build_num = 0
         self.build_num = None
+        self.util_dir = pathlib.Path(__file__).parent.parent / "utilities"
 
     def prepare_files(self):
         """
@@ -119,16 +120,6 @@ class ManifestBuilder:
                 output_file.unlink()
 
             self.output_files[name] = output_file
-
-    @staticmethod
-    def update_manifest_repo():
-        """
-        Update the manifest repository
-        """
-
-        print('Updating manifest repository...')
-        run(['git', 'fetch', '--all'], check=True)
-        run(['git', 'checkout', '-B', 'master', 'origin/master'], check=True)
 
     def parse_manifest(self):
         """
@@ -190,31 +181,18 @@ class ManifestBuilder:
         Handle the various manifest tasks:
           - Clone the manifest repository if it's not already there
           - Update the manifest repository to latest revision
-          - Parse the manifest and gather product and manfiest config
+          - Parse the manifest and gather product and manifest config
             information
         """
 
         manifest_dir = pathlib.Path('manifest')
-
-        # If we've been requested to use a different manifest repository,
-        # delete the manifest directory so that the next block will
-        # re-clone it
-        if manifest_dir.exists():
-            with pushd(manifest_dir):
-                url = run(
-                    ['git', 'ls-remote', '--get-url', 'origin'],
-                    check=True, stdout=PIPE
-                ).stdout.decode().strip()
-            if url != self.manifest_project:
-                print('"manifest" dir pointing to different remote, removing..')
-                shutil.rmtree(manifest_dir)
-
-        if not manifest_dir.exists():
-            run(['git', 'clone', self.manifest_project, 'manifest'],
-                check=True)
+        run([
+            self.util_dir / "clean_git_clone",
+            self.manifest_project,
+            manifest_dir
+        ])
 
         with pushd(manifest_dir):
-            self.update_manifest_repo()
             self.parse_manifest()
             self.determine_product_path()
             self.get_product_and_manifest_config()
@@ -259,10 +237,13 @@ class ManifestBuilder:
                             'git', 'commit', '-am', f'Automated update of '
                             f'{self.product} from submodules'
                         ], check=True)
+                        # Due to clean_git_clone, we can be assured that
+                        # the local git branch name matches the name in
+                        # Gerrit and that a bare "push" will push to a
+                        # branch with the same name, even when pushing
+                        # to a different remote URL
                         run([
-                            'git', 'push',
-                            self.push_manifest_project,
-                            'refs/heads/master:refs/heads/master'
+                            'git', 'push', self.push_manifest_project
                         ], check=True)
                     else:
                         print('Skipping push of updated input manifest '
@@ -286,7 +267,10 @@ class ManifestBuilder:
 
         self.build_job = \
             self.manifest_config.get('jenkins_job', f'{self.product}-build')
+        self.build_job_parameters = \
+            self.manifest_config.get('jenkins_job_parameters', {})
         self.platforms = self.manifest_config.get('platforms', [])
+
 
     def set_build_parameters(self):
         """
@@ -351,17 +335,13 @@ class ManifestBuilder:
         """
 
         bm_dir = pathlib.Path('build-manifests')
-
-        if not bm_dir.is_dir():
-            run(['git', 'clone', f'ssh://git@github.com/'
-                 f'{self.build_manifests_org}/build-manifests'],
-                check=True)
+        run([
+            self.util_dir / "clean_git_clone",
+            f'ssh://git@github.com/{self.build_manifests_org}/build-manifests',
+            bm_dir
+        ])
 
         with pushd(bm_dir):
-            print('Updating the build-manifests repository...')
-            run(['git', 'fetch', '--all'], check=True)
-            run(['git', 'reset', '--hard', 'origin/master'], check=True)
-
             self.build_manifest_filename = pathlib.Path(
                 f'{self.product_path}/{self.release}/{self.version}.xml'
             ).resolve()
@@ -379,41 +359,30 @@ class ManifestBuilder:
 
             self.build_num = max(self.last_build_num + 1, self.start_build)
 
-    def generate_changelog(self):
+    def check_for_changes(self):
         """
-        Generate the CHANGELOG file from any changes that have been
-        found; if none are found and the build is not being forced,
-        write out the properties files and exit the program
+        Check if there have been changes since the previous build.
+
+        - If no changes (and not being forced), announce that fact;
+          create empty properties files; and exit.
+
+        - Otherwise, announce new build; generate the CHANGELOG file
+          from any changes that have been found; write out the
+          properties files.
         """
 
         if self.build_manifest_filename.exists():
-            output = run(['repo', 'diffmanifests', '--raw',
-                          self.build_manifest_filename],
-                         check=True, stdout=PIPE).stdout
-            # Strip out non-project lines as well as projects that we
-            # do not wish to trigger new builds. Note: the trailing space
-            # after the project names below is intentional, to prevent
-            # matching other projects that happen to start with the same
-            # letters as a project we wish to ignore.
-            lines = [
-                x for x in output.splitlines()
-                if not (
-                    x.startswith(b' ')
-                    or x.startswith(b'C testrunner ')
-                    or x.startswith(b'C product-metadata ')
-                    or x.startswith(b'C product-texts ')
-                    or x.startswith(b'C golang ')
-                    or x.startswith(b'C mobile-testkit ')
-                )
-            ]
-
-            if not lines:
+            chk_result = run([
+                f"{script_dir}/manifest-unchanged",
+                "--repo-sync", ".",
+                "--build-manifest", self.build_manifest_filename,
+            ])
+            if chk_result.returncode == 0:
                 if not self.force:
-                    print('*\n*\n*\n'
-                          f'***** No changes since last build {self.version}-'
-                          f'{self.last_build_num}; not executing '
-                          f'new build *****\n'
-                          '*\n*\n*\n')
+                    print('*\n*\n*\n***** No changes since '
+                          f'{self.product} {self.release} '
+                          f'build {self.version}-{self.last_build_num};'
+                          ' not executing new build *****\n*\n*\n*\n')
                     json_file = self.output_files['build-properties.json']
                     prop_file = self.output_files['build.properties']
 
@@ -425,10 +394,13 @@ class ManifestBuilder:
 
                     sys.exit(0)
                 else:
-                    print(f'No changes since last build {self.version}-'
-                          f'{self.last_build_num}, but forcing new '
-                          f'build anyway')
+                    print('No changes since last build but forcing new '
+                          'build anyway')
 
+            print('*\n*\n*\n***** Triggering build '
+                  f'{self.product} {self.release} '
+                  f'build {self.version}-{self.build_num} '
+                  '*****\n*\n*\n*\n')
             print('Saving CHANGELOG...')
             # Need to re-run 'repo diffmanifests' without '--raw'
             # to get pretty output
@@ -493,8 +465,7 @@ class ManifestBuilder:
             run(['git', 'commit', '-m', commit_msg], check=True)
 
             if self.push:
-                run(['git', 'push', 'origin', f'HEAD:refs/heads/master'],
-                    check=True)
+                run(['git', 'push'], check=True)
             else:
                 print('Skipping push of new build manifest due to --no-push')
 
@@ -533,25 +504,18 @@ class ManifestBuilder:
             'GO_VERSION': self.go_version,
             'FORCE': self.force
         }
+        # Append job parameters from product-config.json
+        properties.update(self.build_job_parameters)
 
         with open(self.output_files['build-properties.json'], 'w') as fh:
             json.dump(properties, fh, indent=2, separators=(',', ': '))
 
         with open(self.output_files['build.properties'], 'w') as fh:
-            plats = ' '.join(self.platforms)
-            fh.write(f'PRODUCT={self.product}\n'
-                     f'RELEASE={self.release}\n'
-                     f'PRODUCT_BRANCH={self.product_branch}\n'
-                     f'VERSION={self.version}\n'
-                     f'BLD_NUM={self.build_num}\n'
-                     f'PROD_NAME={self.prod_name}\n'
-                     f'PRODUCT_PATH={self.product_path}\n'
-                     f'MANIFEST={self.manifest}\n'
-                     f'PARENT={self.parent}\n'
-                     f'BUILD_JOB={self.build_job}\n'
-                     f'PLATFORMS={plats}\n'
-                     f'GO_VERSION={self.go_version}\n'
-                     f'FORCE={self.force}\n')
+            for key, value in properties.items():
+                if isinstance(value, list):
+                    fh.write(f'{key}={" ".join(value)}\n')
+                else:
+                    fh.write(f'{key}={value}\n')
 
     def create_tarball(self):
         """
@@ -658,7 +622,7 @@ class ManifestBuilder:
         self.update_bm_repo_and_get_build_num()
 
         with pushd(self.product_path):
-            self.generate_changelog()
+            self.check_for_changes()
             commit_msg = self.update_build_manifest_annotations()
 
         self.push_manifest(commit_msg)

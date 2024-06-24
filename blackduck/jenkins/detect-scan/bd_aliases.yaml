@@ -28,12 +28,16 @@
     "14.0.4": "14.0.0"
     "14.0.6": "14.0.5"
 
+# libstdc++
+"899d93c9-1182-4d34-9349-5bf3e34aaa69":
+  fallback-versions:
+    # Yes, this is the right way around - BD knows 13.2.1 but not 13.2.0
+    "13.2.0": "13.2.1"
+
 # Go programming language
 "6d055c2b-f7d7-45ab-a6b3-021617efd61b":
   fallback-versions:
-    "1.21.2": "1.21.0"
-    "1.21.3": "1.21.0"
-    "1.20.10": "1.20.9"
+    "1.22.2": "1.22.1"
 
 # Python cffi
 "a136afda-2456-41df-a8f4-2d74ef679b21":
@@ -51,9 +55,15 @@
     "jdk-17.0.7-ga": "jdk-17.0.7+7"
 
 # GRPC
-"4c1ff009-d3b6-4f0c-8c3c-fd810d1b8d5c":
+"d720ec74-66da-4af3-a909-a1e799f0727f":
   bd-id-aliases:
     - "a38e1dc0-f53d-4dc1-adb4-6328fc424fb5"
+    - "4c1ff009-d3b6-4f0c-8c3c-fd810d1b8d5c"
+
+# PCRE
+"55d69c03-c8e9-4f39-af25-43f7b949b083":
+  bd-id-aliases:
+    - "8c9723be-a23f-4974-9645-54c471aed433"
 
 # libnsl
 "903a5281-80d6-454c-b18c-ac526e69ae2c":

@@ -1,4 +1,8 @@
 # General utility shell functions, useful for any script/product
+#
+# Note that this is generally intended for use by bash scripts but
+# should at least be parseable by zsh. If you need to add a function
+# that doesn't work properly in zsh, add it to shell-utils-bash-only.sh
 
 function chk_set {
     var=$1
@@ -48,42 +52,60 @@ function version_lt() {
 ####
 
 if [ -n "$BASH_VERSINFO" ]; then
-
-    # Provide a dummy "usage" command for clients that don't define it
-    type -t usage > /dev/null || usage() {
-        exit 1
-    }
-
-    xtrace_stack=()
-
-    # Disable bash's 'xtrace', but remember the current setting so
-    # it can be restored later with restore_xtrace().
-    function stop_xtrace() {
-        if shopt -q -o xtrace; then
-            set +x
-            xtrace_stack+=("enabled")
-        else
-            xtrace_stack+=("disabled")
-        fi
-    }
-
-    # Restore bash's 'xtrace', if it was enabled before the most recent
-    # call to stop_xtrace().
-    function restore_xtrace() {
-        peek="${xtrace_stack[-1]}"
-        unset 'xtrace_stack[-1]'
-        if [ "${peek}" = "enabled" ]; then
-            set -x
-        else
-            set +x
-        fi
-    }
-
+    source "$(dirname "${BASH_SOURCE[0]}")/shell-utils-bash-only.sh"
 fi
+
 ####
 # End bash-only functions
 ####
 
+function clean_git_clone() {
+    # Does everything possible to ensure that a given directory looks
+    # like a freshly-cloned git repository, including having a remote
+    # named 'origin' pointing to the specified URL; being checked out to
+    # a local branch with the same name as the repository's default
+    # branch, tracking that remote branch; and with no local changes
+    local gitrepo=$1
+    local outdir=$2
+
+    if [ -z "${outdir}" ]; then
+        outdir=$(basename "${gitrepo}")
+    fi
+
+    # Create dir if not already there
+    if [ ! -d "${outdir}" ]; then
+        mkdir -p "${outdir}"
+    fi
+    pushd "${outdir}"
+
+    # Initialize fresh git repository if not already one
+    if [ ! -d ".git" ]; then
+        # Need to specify some default branch name to avoid warnings
+        git init -b main
+    fi
+
+    # Point 'origin' to the git repository and fetch changes
+    curr=$(git config --local --default="unset" --get remote.origin.url)
+    if [ "${curr}" = "unset" ]; then
+        git remote add origin "${gitrepo}"
+    elif [ "${curr}" != "${gitrepo}" ]; then
+        git remote set-url origin "${gitrepo}"
+    fi
+    git fetch origin
+
+    # Ensure we're up-to-date with the remote's default branch
+    git remote set-head origin --auto
+    default_branch=$(basename $(git rev-parse --abbrev-ref origin/HEAD))
+
+    # Wipe all local changes
+    git reset --hard
+    git clean -dfx
+
+    # Create new local branch with correct name and check it out
+    git checkout -B ${default_branch} --track origin/${default_branch}
+
+    popd
+}
 
 # Given a fully-qualified Docker image name:tag from a registry,
 # returns 0 (success) if the image is available for arm64, or 1
@@ -145,34 +167,6 @@ function image_arm64_key() {
 # empty string.
 function image_amd64_key() {
     _image_arch_key amd64 $1
-}
-
-# Extracts the value of an annotation (converted to ALL_CAPS) from the
-# "build" project in the current manifest, using either the 'repo' tool
-# (if there's a .repo dir in pwd) or else the 'xmllint' tools (if
-# there's a manifest.xml in pwd). If neither tool works, die. If the
-# manifest simply doesn't have such an annotation, returns "".
-function annot_from_manifest {
-
-    annot=$(echo "$1" | tr '[a-z]' '[A-Z]')
-
-    # Try to extract the annotation using "repo" if available, otherwise
-    # "xmllint" on "manifest.xml". If neither tool works, die!
-    if test -d .repo && command -v repo > /dev/null; then
-        DEP_VERSION=$(repo forall build -c 'echo $REPO__'${annot} 2> /dev/null)
-    elif test -e manifest.xml && command -v xmllint > /dev/null; then
-        # This version expects "manifest.xml" in the current directory, from
-        # either a build-from-manifest source tarball or the Black Duck script
-        # running "repo manifest -r".
-        DEP_VERSION=$(xmllint \
-            --xpath 'string(//project[@name="build"]/annotation[@name="'${annot}'"]/@value)' \
-            manifest.xml)
-    else
-        echo "Couldn't use repo or xmllint - can't continue!"
-        exit 3
-    fi
-
-    echo ${DEP_VERSION}
 }
 
 # Extracts the value of the GOVERSION or GO_VERSION annotation from the

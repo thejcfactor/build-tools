@@ -6,7 +6,6 @@ import json
 import os
 import pprint
 import re
-import shutil
 import sys
 import xml.etree.ElementTree as ET
 
@@ -43,7 +42,7 @@ def scan_manifests(manifest_repo="ssh://git@github.com/couchbase/manifest"):
         os.chdir(manifest_dir)
         print("Updating manifest repository...")
         check_call(["git", "fetch", "--all"])
-        check_call(["git", "reset", "--hard", "origin/master"])
+        check_call(["git", "reset", "--hard", "origin/HEAD"])
 
     return get_metadata_for_products(manifest_dir)
 
@@ -79,6 +78,7 @@ def get_metadata_for_products(manifest_dir):
                 manifests.update(prod_manifests)
 
     return manifests
+
 
 def _load_product_config(manifest_dir, product_path):
     """
@@ -168,6 +168,7 @@ def get_metadata_for_manifest(manifest_dir, manifest_path):
     metadata = config[manifest_path]
     _append_manifest_metadata(metadata, manifest_dir, manifest_path, product_path, override_product)
     return metadata
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
