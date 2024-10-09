@@ -1,11 +1,7 @@
 #!/bin/bash -ex
 
 # example usage
-<<<<<<< HEAD
-# get_source.sh couchbase-columnar-sdk-python 4.1.9 4.1.9 9999
-=======
 # get_source.sh couchbase-columnar-sdk-python 1.0.0 1.0.0 9999
->>>>>>> 4f18348 (Black Duck: Add Python and Node.js Columnar SDKs)
 
 # Set to "couchbase-columnar-sdk-python", ignored in this script.
 PRODUCT=$1
@@ -49,13 +45,10 @@ tar -xvf $TARBALL
 mkdir $SOURCE_DIR
 TARBALL_CONTENTS_DIR=$(echo $TARBALL | rev | cut -c 8- | rev)
 mv $TARBALL_CONTENTS_DIR/* $SOURCE_DIR
-
-# versions >= v4.1.9 also include C++ SDK's BD manifest in scan
 pushd $SOURCE_DIR
-if [ -f "columnar-sdk-python-black-duck-manifest.yaml" ]; then
-    mv deps/couchbase-cxx-client/couchbase-sdk-cxx-black-duck-manifest.yaml .
-    rm -rf deps
-fi
+# All columnar versions of SDK should have the BD manifest
+mv deps/couchbase-cxx-client/couchbase-sdk-cxx-black-duck-manifest.yaml .
+rm -rf deps
 popd
 
 # Since our source tarball includes a setup.py and requirements.txt the BD

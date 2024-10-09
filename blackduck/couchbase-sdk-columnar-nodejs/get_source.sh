@@ -48,11 +48,9 @@ tar -xvf $TARBALL
 mkdir $SOURCE_DIR
 mv package/* $SOURCE_DIR
 pushd $SOURCE_DIR
-# versions >= v4.2.8 also include C++ SDK's BD manifest in scan
-if [ -f "columnar-sdk-nodejs-black-duck-manifest.yaml" ]; then
-    mv deps/couchbase-cxx-client/couchbase-sdk-cxx-black-duck-manifest.yaml .
-    rm -rf deps
-fi
+# All columnar versions of SDK should have the BD manifest
+mv deps/couchbase-cxx-client/couchbase-sdk-cxx-black-duck-manifest.yaml .
+rm -rf deps
 # package-lock.json + package.json should mean the BD
 # detector search will satisfy the HIGH accuracy requirement
 # SEE: https://sig-product-docs.synopsys.com/bundle/integrations-detect/page/components/detectors.html
