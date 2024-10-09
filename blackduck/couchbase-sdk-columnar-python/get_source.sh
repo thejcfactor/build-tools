@@ -1,7 +1,11 @@
 #!/bin/bash -ex
 
 # example usage
+<<<<<<< HEAD
 # get_source.sh couchbase-columnar-sdk-python 4.1.9 4.1.9 9999
+=======
+# get_source.sh couchbase-columnar-sdk-python 1.0.0 1.0.0 9999
+>>>>>>> 4f18348 (Black Duck: Add Python and Node.js Columnar SDKs)
 
 # Set to "couchbase-columnar-sdk-python", ignored in this script.
 PRODUCT=$1
@@ -24,7 +28,7 @@ pip3 install "conan<2"
 python -m pip download --no-deps --no-binary couchbase-columnar --no-cache-dir couchbase-columnar==$VERSION || true
 if [ ! -f "${TARBALL}" ]; then
     if [ "$RELEASE" == "$VERSION" ] ; then
-        RELEASE="master"
+        RELEASE="main"
     fi
     echo "Version $VERSION does not exist on PyPI, checking out git repository and building sdist."
     git clone https://github.com/couchbaselabs/columnar-python-client $SOURCE_DIR

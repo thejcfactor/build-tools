@@ -27,7 +27,7 @@ export PATH="${WORKSPACE}/extra/nodejs-${NODE_VER}/bin:$PATH"
 npm pack couchbase-columnar@$VERSION || true
 if [ ! -f "${TARBALL}" ]; then
     if [ "$RELEASE" == "$VERSION" ] ; then
-        RELEASE="master"
+        RELEASE="main"
     fi
     echo "Version $VERSION does not exist on npm, checking out git repository and building tarball."
     git clone https://github.com/couchbaselabs/columnar-nodejs-client $SOURCE_DIR
