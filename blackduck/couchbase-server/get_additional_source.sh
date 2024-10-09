@@ -35,9 +35,6 @@ create_analytics_poms() {
   "${SCRIPT_DIR}/../scripts/create-maven-boms" \
     --outdir analytics-boms \
     --file analytics/cbas/cbas-install/target/bom.txt
-
-  # Delete all the built artifacts so BD doesn't scan them
-  rm -rf install
 }
 
 # Main script starts here - decide which action to take based on VERSION
@@ -46,7 +43,7 @@ create_analytics_poms() {
 # a reliable way to extract the CMake version from the source (because
 # CMake downloads themselves are inconsistent), so just hardcode a
 # recent CMake.
-CMAKE_VERSION=3.23.1
+CMAKE_VERSION=3.29.6
 NINJA_VERSION=1.10.2
 cbdep install -d "${WORKSPACE}/extra" cmake ${CMAKE_VERSION}
 cbdep install -d "${WORKSPACE}/extra" ninja ${NINJA_VERSION}
@@ -67,6 +64,15 @@ cmake \
   -D CB_DOWNLOAD_DEPS_PLATFORM="${CB_DOWNLOAD_DEPS_PLATFORM}" \
   -G Ninja \
   "${WORKSPACE}/src"
+
+# Most cbdeps packages that have embedded black-duck-manifest.yaml files will
+# be under ${BUILD_DIR} and so will get picked up automatically. However, cbpy
+# gets unpacked into the install directory, which we will shortly delete. Copy
+# that file into ${BUILD_DIR} to keep it safe.
+CBPY_MANIFEST="${WORKSPACE}/src/install/lib/python/interp/cbpy-black-duck-manifest.yaml"
+if [ -e "${CBPY_MANIFEST}" ]; then
+  cp "${CBPY_MANIFEST}" .
+fi
 
 # Extract the set of Go versions from the build. If the Go version
 # report exists in the build directory, use that; otherwise peel stuff
@@ -109,6 +115,9 @@ if [ "6.6.5" = $(printf "6.6.5\n${VERSION}" | sort -n | head -1) ]; then
 else
   download_analytics_jars
 fi
+
+# Delete all the built artifacts so BD doesn't scan them
+rm -rf install
 
 # If we find any go.mod files with zero "require" statements, they're probably one
 # of the stub go.mod files we introduced to make other Go projects happy. Black Duck

@@ -5,6 +5,12 @@ RELEASE=$2
 VERSION=$3
 BLD_NUM=$4
 
+# There's no consistent place across versions to grab a cmake version from
+# the source, at time of writing 3.28.3 is the latest release
+CMAKE_VERSION=3.28.3
+cbdep install -d "${WORKSPACE}/extra" cmake ${CMAKE_VERSION}
+export PATH="${WORKSPACE}/extra/cmake-${CMAKE_VERSION}/bin:${PATH}"
+
 # current repo, do not remove:
 # github.com/couchbase/couchbase-php-client
 
@@ -35,7 +41,35 @@ else
     echo "No tag $TAG, assuming master"
 fi
 
-# Work-around for Black Duck Detect bug
-sed -i '/DOCTYPE/d' package.xml
+TARBALL=
+case "$VERSION" in
+    4.2.*)
+        gem install --user-install --no-document nokogiri
+        BUILD_NUMBER=0 ruby bin/package.rb
+        TARBALL=$(ls -1 couchbase-*.tgz | head -1)
+        mv $TARBALL ../
+        ;;
+
+    *)
+        # Work-around for Black Duck Detect bug
+        sed '/DOCTYPE/d' package.xml
+        ;;
+esac
 
 popd
+
+if [[ ! -z "${TARBALL}" ]]
+then
+    tar xf ${TARBALL}
+    TARBALL_CONTENTS_DIR=$(basename ${TARBALL} .tgz)
+    for MANIFEST in $(find . -name 'couchbase-sdk-php-black-duck-manifest.yaml')
+    do
+        cp ${MANIFEST} ${TARBALL_CONTENTS_DIR}
+    done
+
+    rm ${TARBALL}
+    rm -rf couchbase-php-client
+    mv ${TARBALL_CONTENTS_DIR} couchbase-php-client
+    cp package.xml couchbase-php-client/
+    rm -rf couchbase-php-client/src/deps
+fi
